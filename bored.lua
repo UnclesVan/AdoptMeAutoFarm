@@ -78,7 +78,7 @@ end
 print("Character is now at the MainMap spawn location. Beginning the second teleport.")
 
 -- Find the "BeachPartyAilmentTarget" part.
-local target_part = Workspace:WaitForChild("StaticMap"):WaitForChild("Beach"):WaitForChild("BeachPartyAilmentTarget")
+local target_part Workspace.StaticMap.Park.AilmentTarget
 
 -- --- NEW LOGIC: CREATE A FLAT PLATFORM AT THE TARGET LOCATION ---
 if target_part then
