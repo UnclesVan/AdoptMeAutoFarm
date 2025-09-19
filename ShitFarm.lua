@@ -116,6 +116,12 @@ local LocalPlayer = Players.LocalPlayer
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
+local LocalPlayer = game:GetService("Players").LocalPlayer
+local RunService = game:GetService("RunService")
+local currentWalkConnection = nil
+local centerPoint = nil
+local radius = 5
+
 
 -- MODULES
 -- A utility function to safely require modules without crashing the script.
@@ -481,11 +487,22 @@ local function getPlayerPet()
 	return nil
 end
 
+
+
+
+
+
 local function stopJumping()
-	print("Jumping stopped.")
-	if currentJumpConnection then
-		currentJumpConnection:Disconnect()
-		currentJumpConnection = nil
+	print("Movement stopped.")
+	if currentWalkConnection then
+		currentWalkConnection:Disconnect()
+		currentWalkConnection = nil
+	end
+	
+	local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid:MoveTo(character.PrimaryPart.Position) -- Stops the character
 	end
 end
 
@@ -493,13 +510,31 @@ local function startCircleWalk()
 	print("Starting circle walk.")
 	local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if not humanoid then warn("No humanoid for walk") return end
 	
-	currentJumpConnection = RunService.Stepped:Connect(function()
-		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-		humanoid.Jump = true
+	if not humanoid or not character.PrimaryPart then
+		warn("No humanoid or PrimaryPart found.")
+		return
+	end
+	
+	centerPoint = character.PrimaryPart.Position
+	
+	local angle = 0
+	local speed = 0.5
+	
+	currentWalkConnection = RunService.Heartbeat:Connect(function(dt)
+		local x = centerPoint.X + radius * math.cos(angle)
+		local z = centerPoint.Z + radius * math.sin(angle)
+		
+		humanoid:MoveTo(Vector3.new(x, centerPoint.Y, z))
+		
+		angle = angle + speed * dt
 	end)
 end
+
+
+
+
+
 
 -- New robust search function to find the player's specific furniture folder.
 local function findPlayerFurnitureFolder()
