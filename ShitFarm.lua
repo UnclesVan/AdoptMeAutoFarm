@@ -515,17 +515,7 @@ local function handleSickAilment(ailmentData)
 	connection:Disconnect()
 
 	if not ailmentCompleted then
-		warn("Ailment did not complete within timeout. Forcefully completing now.")
-		-- Added a check here to ensure the AilmentsManager is not nil before attempting to complete.
-		local currentAilmentsManager = require(ReplicatedStorage.new.modules.Ailments.AilmentsClient)
-		if currentAilmentsManager and currentAilmentsManager.complete_ailment then
-			local success, err = pcall(currentAilmentsManager.complete_ailment, currentAilmentsManager, ailmentData.entityRef, ailmentData.ailmentInstance)
-			if not success then
-				warn("Failed to force-complete ailment:", err)
-			end
-		else
-			warn("AilmentsManager module or complete_ailment function is nil. Cannot complete ailment.")
-		end
+		warn("Ailment did not complete within timeout. Cannot force completion, relying on in-game action.")
 	end
 	
 	print("Ailment 'sick' completed. Starting interior teleport sequence.")
@@ -692,17 +682,7 @@ local function handleAilmentOnPlatform(ailmentData)
 		connection:Disconnect()
 
 		if not ailmentCompleted then
-			warn("Ailment did not complete within timeout. Forcefully completing now.")
-			-- Added a check here to ensure the AilmentsManager is not nil before attempting to complete.
-			local currentAilmentsManager = require(ReplicatedStorage.new.modules.Ailments.AilmentsClient)
-			if currentAilmentsManager and currentAilmentsManager.complete_ailment then
-				local success, err = pcall(currentAilmentsManager.complete_ailment, currentAilmentsManager, ailmentData.entityRef, ailmentData.ailmentInstance)
-				if not success then
-					warn("Failed to force-complete ailment:", err)
-				end
-			else
-				warn("AilmentsManager module or complete_ailment function is nil. Cannot complete ailment.")
-			end
+			warn("Ailment did not complete within timeout. Cannot force completion, relying on in-game action.")
 		end
 	elseif ailmentId == "walk" then
 		print("Attempting to hold pet for 'walk' ailment.")
@@ -785,17 +765,7 @@ local function handleAilmentOnPlatform(ailmentData)
 	connection:Disconnect()
 
 	if not ailmentCompleted then
-		warn("Ailment did not complete within timeout. Forcefully completing now.")
-		-- Added a check here to ensure the AilmentsManager is not nil before attempting to complete.
-		local currentAilmentsManager = require(ReplicatedStorage.new.modules.Ailments.AilmentsClient)
-		if currentAilmentsManager and currentAilmentsManager.complete_ailment then
-			local success, err = pcall(currentAilmentsManager.complete_ailment, currentAilmentsManager, ailmentData.entityRef, ailmentData.ailmentInstance)
-			if not success then
-				warn("Failed to force-complete ailment:", err)
-			end
-		else
-			warn("AilmentsManager module or complete_ailment function is nil. Cannot complete ailment.")
-		end
+		warn("Ailment did not complete within timeout. Cannot force completion, relying on in-game action.")
 	end
 	
 	print("Ailment completed. Teleporting back to housing.")
@@ -874,17 +844,7 @@ local function teleportToStaticMap(ailmentData)
 	connection:Disconnect()
 	
 	if not ailmentCompleted then
-		warn("Ailment did not complete within timeout. Forcefully completing now.")
-		-- Added a check here to ensure the AilmentsManager is not nil before attempting to complete.
-		local currentAilmentsManager = require(ReplicatedStorage.new.modules.Ailments.AilmentsClient)
-		if currentAilmentsManager and currentAilmentsManager.complete_ailment then
-			local success, err = pcall(currentAilmentsManager.complete_ailment, currentAilmentsManager, ailmentData.entityRef, ailmentData.ailmentInstance)
-			if not success then
-				warn("Failed to force-complete ailment:", err)
-			end
-		else
-			warn("AilmentsManager module or complete_ailment function is nil. Cannot complete ailment.")
-		end
+		warn("Ailment did not complete within timeout. Cannot force completion, relying on in-game action.")
 	end
 	
 	print("Task wait completed. Teleporting back to housing.")
@@ -952,7 +912,7 @@ local function handleInteriorAilment(ailmentData, locationName)
 		if success then
 			print("✅ Successfully called ActivateFurniture for " .. furnitureName .. "!")
 		else
-			warn("❌ Failed to call ActivateFurniture:", result)
+			warn("❌ Failed to call ActivateFurniture:", tostring(result))
 		end
 	else
 		warn("❌ Could not find " .. furnitureName .. " inside the " .. locationName .. " interior.")
@@ -975,14 +935,7 @@ local function handleInteriorAilment(ailmentData, locationName)
 	connection:Disconnect()
 
 	if not ailmentCompleted then
-		warn("Ailment did not complete within timeout. Forcefully completing now.")
-		local currentAilmentsManager = require(ReplicatedStorage.new.modules.Ailments.AilmentsClient)
-		if currentAilmentsManager and currentAilmentsManager.complete_ailment then
-			local success, err = pcall(currentAilmentsManager.complete_ailment, currentAilmentsManager, ailmentData.entityRef, ailmentData.ailmentInstance)
-			if not success then
-				warn("Failed to force-complete ailment:", err)
-			end
-		end
+		warn("Ailment did not complete within timeout. Cannot force completion, relying on in-game action.")
 	end
 	
 	print("Ailment completed. Teleporting back to housing.")
