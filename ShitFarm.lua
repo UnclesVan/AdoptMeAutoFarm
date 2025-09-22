@@ -33,8 +33,13 @@ local function inspectUpvalues()
                         table.insert(remotes, {key = k, remote = v})
                         -- If it's the first time scanning, print remote information
                         if not printedOnce then
-                            print("Key: " .. k .. " Type: " .. typeof(k) .. ", Value Type: " .. typeof(v))
-                            print("Found remote: " .. v:GetFullName())
+                            print("Dehashing in Progress")
+                            print("[]")
+                            print("[]")
+                            print("[]")
+						    print("[]")
+						    print("[]")
+							print("[]")
                         end
                     end
                 end
@@ -178,39 +183,38 @@ local STATIC_MAP_TARGETS = {
 	beach_party = "StaticMap.Beach.BeachPartyAilmentTarget",
 }
 
--- Furniture mappings for specific interiors.
--- Fix: Corrected the path by removing the redundant "workspace" part.
-local INTERIOR_FURNITURE_MAPPING = {
-    ["salon"] = "Interiors.Salon.InteriorOrigin",
-    ["pizza_party"] = "Interiors.PizzaShop.InteriorOrigin",
-    ["school"] = "Interiors.School.InteriorOrigin"
+-- NEW: Mapping of interior-specific ailments to their required furniture.
+local AILMENT_FURNITURE_MAPPING = {
+    ["school"] = "SchoolRefresh2023DefaultChair2",
+    ["pizza_party"] = "PizzaShopChair",
+    ["salon"] = "ColoredHairSprayWashBasin",
 }
 
 -- Define common teleport settings.
 -- Note: We will use a *minimal* settings table for 'housing' teleport
 -- based on the MagicHouseDoorInteractions module.
 local commonTeleportSettings = {
-    fade_in_length = 0.5, -- Duration of the fade-in effect (seconds)
-    fade_out_length = 0.4, -- Duration of the fade-out effect (seconds)
-    fade_color = Color3.new(0, 0, 0), -- Color to fade to (black in this case)
+	fade_in_length = 0.5, -- Duration of the fade-in effect (seconds)
+	fade_out_length = 0.4, -- Duration of the fade-out effect (seconds)
+	fade_color = Color3.new(0, 0, 0), -- Color to fade to (black in this case)
 
-    -- Callback function executed just before the player starts teleporting.
-    player_about_to_teleport = function() print("Player is about to teleport...") end,
-    -- Callback function executed once the teleportation process is fully completed.
-    teleport_completed_callback = function()
-        print("Teleport completed callback.")
-        task.wait(0.2) -- Small wait after teleport for stability
-    end,
-    player_to_teleport_to = nil,
+	-- Callback function executed just before the player starts teleporting.
+	player_about_to_teleport = function() print("Player is about to teleport...") end,
+	-- Callback function executed once the teleportation process is fully completed.
+	teleport_completed_callback = function()
+		print("Teleport completed callback.")
+		task.wait(0.2) -- Small wait after teleport for stability
+	end,
+	player_to_teleport_to = nil,
 
-    anchor_char_immediately = true, -- Whether to anchor the character right away
-    post_character_anchored_wait = 0.5, -- Wait time after character is anchored
-    
-    move_camera = true, -- Whether the camera should move with the player
+	anchor_char_immediately = true, -- Whether to anchor the character right away
+	post_character_anchored_wait = 0.5, -- Wait time after character is anchored
+	
+	move_camera = true, -- Whether the camera should move with the player
 
-    -- These properties are part of the settings table expected by enter_smooth.
-    door_id_for_location_module = nil,
-    exiting_door = nil,
+	-- These properties are part of the settings table expected by enter_smooth.
+	door_id_for_location_module = nil,
+	exiting_door = nil,
 }
 
 -- --- REMOTE EVENTS & FUNCTIONS ---
@@ -221,6 +225,7 @@ local BuyItemRemote = ReplicatedStorage:WaitForChild("API"):WaitForChild("ShopAP
 local UnequipRemote = ReplicatedStorage:WaitForChild("API"):WaitForChild("ToolAPI/Unequip")
 local EjectBabyRemote = ReplicatedStorage:WaitForChild("API"):WaitForChild("AdoptAPI/EjectBaby")
 local activateFurniture = ReplicatedStorage:WaitForChild("API"):WaitForChild("HousingAPI/ActivateFurniture")
+local setDoorLockedRemote = ReplicatedStorage:WaitForChild("API"):WaitForChild("HousingAPI/SetDoorLocked")
 
 -- --- GLOBAL STATE ---
 local isProcessingAilment = false
@@ -364,14 +369,47 @@ end
 
 -- Teleports the player and pet to a specified CFrame.
 local function safeTeleportToCFrame(targetCFrame)
-    local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-    local petModel = getFirstPetModel()
+	local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+	local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+	local petModel = getFirstPetModel()
 
-    humanoidRootPart.CFrame = targetCFrame
-    if petModel and petModel:FindFirstChild("PrimaryPart") then
-        petModel.PrimaryPart.CFrame = targetCFrame
-    end
+	humanoidRootPart.CFrame = targetCFrame
+	if petModel and petModel:FindFirstChild("PrimaryPart") then
+		petModel.PrimaryPart.CFrame = targetCFrame
+	end
+end
+
+-- Function to lock the house door.
+local function lockDoor()
+	local args = { true }
+	local success, result = pcall(function()
+		return setDoorLockedRemote:InvokeServer(unpack(args))
+	end)
+	
+	if success then
+		print("✅Successfully called SetDoorLocked to lock the door.")
+	else
+		warn("❌Failed to call SetDoorLocked:", result)
+	end
+end
+
+-- The new, crucial function for cleaning up after an ailment is complete.
+local function cleanupAilment(ailmentEntry)
+	local ailmentId = ailmentEntry.StoredAilmentId
+	
+	if ailmentId == "walk" then
+		print("Cleaning up after 'walk' ailment by ejecting the baby.")
+		local petModel = ailmentEntry.petModel
+		if petModel and petModel:IsA("Model") then
+			pcall(EjectBabyRemote.FireServer, EjectBabyRemote, petModel)
+		end
+	elseif ailmentId == "ride" then
+		print("Cleaning up after 'ride' ailment by unequipping the stroller.")
+		local itemId = ailmentEntry.unequipItemId
+		if itemId then
+			pcall(UnequipRemote.InvokeServer, UnequipRemote, itemId)
+		end
+	end
 end
 
 -- Handles the 'sick' ailment, which involves buying and creating healing apples
@@ -397,6 +435,9 @@ local function handleSickAilment(ailmentData)
 	print("Attempting to trigger automatic door teleport to destination:", destinationId)
 	print("Using door ID:", doorIdForTeleport)
 	print("Using minimal settings table with house_owner:", tostring(teleportSettings.house_owner))
+	
+	-- Re-acquire InteriorsM before the call
+	InteriorsM = require(ReplicatedStorage.ClientModules.Core.InteriorsM.InteriorsM)
 
 	-- Add a final small wait right before the InteriorsM.enter_smooth call
 	task.wait(1) -- Added a 1-second wait here for final stability
@@ -406,6 +447,7 @@ local function handleSickAilment(ailmentData)
 	
 	print("Successfully teleported to housing.")
 	task.wait(2)
+	lockDoor()
 
 	-- Get the remote to buy the item
 	local ShopRemote = ReplicatedStorage:WaitForChild("API"):WaitForChild("ShopAPI/BuyItem")
@@ -451,42 +493,42 @@ local function handleSickAilment(ailmentData)
 	
 	while not ailmentCompleted and (os.time() - startTime) < timeout do
 		-- Buy the healing apple
-        local buyArgs = {
-            "food",
-            "healing_apple",
-            {
-                buy_count = 1
-            }
-        }
-        
-        print("\nAttempting to buy Healing Apple...")
-        local success, result = pcall(ShopRemote.InvokeServer, ShopRemote, unpack(buyArgs))
-        
-        if success then
-            print("Successfully bought Healing Apple!")
-        else
-            print("Buy command failed: " .. tostring(result))
-        end
+		local buyArgs = {
+			"food",
+			"healing_apple",
+			{
+				buy_count = 1
+			}
+		}
+		
+		print("\nAttempting to buy Healing Apple...")
+		local success, result = pcall(ShopRemote.InvokeServer, ShopRemote, unpack(buyArgs))
+		
+		if success then
+			print("Successfully bought Healing Apple!")
+		else
+			print("Buy command failed: " .. tostring(result))
+		end
 
-        -- Wait for data to update after the purchase
-        task.wait(2)
-        
-        local currentData = waitForData()
-        local currentPlayerData = currentData[LocalPlayer.Name]
-        local foodUniqueId = nil
+		-- Wait for data to update after the purchase
+		task.wait(2)
+		
+		local currentData = waitForData()
+		local currentPlayerData = currentData[LocalPlayer.Name]
+		local foodUniqueId = nil
 
-        -- Find the unique ID for the newly bought Healing Apple
-        local playerFood = currentPlayerData.inventory.food
-        for uniqueId, itemData in pairs(playerFood) do
-            if itemData.id == "healing_apple" then
-                foodUniqueId = uniqueId
-                break
-            end
-        end
+		-- Find the unique ID for the newly bought Healing Apple
+		local playerFood = currentPlayerData.inventory.food
+		for uniqueId, itemData in pairs(playerFood) do
+			if itemData.id == "healing_apple" then
+				foodUniqueId = uniqueId
+				break
+			end
+		end
 
-        if not foodUniqueId then
-            warn("Healing Apple not found in your inventory after purchase.")
-        end
+		if not foodUniqueId then
+			warn("Healing Apple not found in your inventory after purchase.")
+		end
 
 		if foodUniqueId then
 			print("Found Healing Apple unique ID:", foodUniqueId)
@@ -534,338 +576,292 @@ local function handleSickAilment(ailmentData)
 	
 	task.wait(1)
 	
+	-- Re-acquire InteriorsM before the return teleport
+	InteriorsM = require(ReplicatedStorage.ClientModules.Core.InteriorsM.InteriorsM)
 	InteriorsM.enter_smooth(destinationId_Return, doorIdForTeleport_Return, teleportSettings_Return, nil)
 	
 	task.wait(2)
 	print("Successfully returned to housing.")
+	lockDoor()
 end
 
+-- Updated function to handle ailments that require teleporting to the pet's head CFrame.
 local function handleAilmentOnPlatform(ailmentData)
-	-- Add a check to prevent nil errors
-	if not AilmentsManager then
-		warn("AilmentsManager is nil. Cannot handle ailment on platform.")
-		return
-	end
+    -- Re-acquire InteriorsM here to ensure it's not nil after the teleport
+    InteriorsM = require(ReplicatedStorage.ClientModules.Core.InteriorsM.InteriorsM)
+    
+    if not AilmentsManager then
+        warn("AilmentsManager is nil. Cannot handle ailment on platform.")
+        isProcessingAilment = false
+        return
+    end
 
-	local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-	local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-	local petModel = getFirstPetModel()
-	
-	print("🔄Teleporting to AilmentPlatform...")
-	local targetPart = AilmentPlatform
-	
-	if not targetPart then
-		warn("Could not find AilmentPlatform. Cannot proceed with ailment fix.")
-		return
-	end
-	
-	local targetCFrame = targetPart.CFrame * CFrame.new(0, 5, 0)
-	
-	humanoidRootPart.CFrame = targetCFrame
-	
-	if petModel and petModel:FindFirstChild("PrimaryPart") then
-		petModel.PrimaryPart.CFrame = targetCFrame
-	end
-	
-	task.wait(1)
+    local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+    local petModel = getFirstPetModel()
+    
+    print("🔄Teleporting to AilmentPlatform...")
+    local targetPart = AilmentPlatform
+    
+    if not targetPart then
+        warn("Could not find AilmentPlatform. Cannot proceed with ailment fix.")
+        return
+    end
+    
+    -- Teleport the character to the platform first
+    local targetCFrame = targetPart.CFrame * CFrame.new(0, 5, 0)
+    humanoidRootPart.CFrame = targetCFrame
+    
+    if petModel and petModel:FindFirstChild("PrimaryPart") then
+        petModel.PrimaryPart.CFrame = targetCFrame
+    end
+    
+    task.wait(1)
 
-	local humanoid = character:WaitForChild("Humanoid")
-	local ailmentId = ailmentData.ailmentId
+    local humanoid = character:WaitForChild("Humanoid")
+    local ailmentId = ailmentData.ailmentId
 
-	local furnitureMapping = {
-		["hungry"] = "PetFoodBowl",
-		["thirsty"] = "PetWaterBowl",
-		["dirty"] = "CheapPetBathtub",
-		["sleepy"] = "BasicCrib",
-		["toilet"] = "Toilet",
-	}
-	
-	local furnitureName = furnitureMapping[ailmentId]
-	if furnitureName then
-		local furnitureFolder = Workspace:WaitForChild("HouseInteriors"):WaitForChild("furniture")
-		if furnitureFolder then
-			local foundItem = findDeep(furnitureFolder, furnitureName)
-			if foundItem then
-				local furnitureParent = foundItem.Parent
-				local parts = string.split(furnitureParent.Name, "/")
-				local furnitureId = parts[#parts]
-				
-				print("Found the furniture ID for " .. furnitureName .. ": " .. furnitureId)
-				
-				local cframe = character:WaitForChild("Head").CFrame
-				
-				-- New logic to determine the correct action for the furniture
-				local furnitureAction = "UseBlock"
-				if furnitureName == "Toilet" then
-					furnitureAction = "Seat1"
-				end
-				
-				local args = {
-					LocalPlayer,
-					furnitureId,
-					furnitureAction,
-					{
-						cframe = cframe
-					},
-					petModel -- Use the first found pet model.
-				}
-				
-				activateFurniture:InvokeServer(unpack(args))
-				print("Successfully called ActivateFurniture for " .. furnitureName .. " with the '" .. furnitureAction .. "' action.")
-			else
-				warn("Could not find " .. furnitureName .. " inside the furniture folder.")
-			end
-		else
-			warn("The 'furniture' folder could not be found.")
-		end
-	elseif ailmentId == "play" then
-		print("Attempting to fix 'play' ailment by creating Squeaky Bone.")
-		
-		local PetObjectRemote = ReplicatedStorage:WaitForChild("API"):WaitForChild("PetObjectAPI/CreatePetObject")
-		if not PetObjectRemote then
-			warn("PetObjectAPI/CreatePetObject not found. Cannot fix 'play' ailment.")
-			return
-		end
+    -- NEW LOGIC: Determine CFrame based on ailment
+    local petHead = petModel:FindFirstChild("Head")
+    if not petHead then
+        warn("Could not find pet's 'Head' part. Cannot perform head CFrame action.")
+        return
+    end
 
-		local serverData = ClientDataModule.get_data()
-		local playerData = serverData and serverData[LocalPlayer.Name]
-		local itemUniqueId = nil
-		
-		if playerData and playerData.inventory and playerData.inventory.toys then
-			for uniqueId, itemData in pairs(playerData.inventory.toys) do
-				if itemData.id == "squeaky_bone_default" then
-					itemUniqueId = uniqueId
-					break
-				end
-			end
-		end
+    local targetHeadCFrame = petHead.CFrame
+    local furnitureName = nil
+    local furnitureAction = nil
 
-		if not itemUniqueId then
-			warn("Squeaky Bone not found in inventory. Cannot fix 'play' ailment.")
-			return
-		end
+    -- Use specific CFrame logic for each ailment
+    if ailmentId == "dirty" then
+        targetHeadCFrame = petHead.CFrame * CFrame.Angles(0, 0, 0.2)
+        furnitureName = "CheapPetBathtub"
+        furnitureAction = "UseBlock"
+    elseif ailmentId == "sleepy" then
+        targetHeadCFrame = petHead.CFrame * CFrame.Angles(0, -0.2, 0) * CFrame.new(0, -0.5, 0)
+        furnitureName = "BasicCrib"
+        furnitureAction = "UseBlock"
+    elseif ailmentId == "hungry" then
+        targetHeadCFrame = petHead.CFrame * CFrame.new(0, -0.2, 0) * CFrame.Angles(-0.3, 0, 0)
+        furnitureName = "PetFoodBowl"
+        furnitureAction = "UseBlock"
+    elseif ailmentId == "thirsty" then
+        targetHeadCFrame = petHead.CFrame * CFrame.Angles(0, 0.2, 0) * CFrame.new(0, -0.2, 0)
+        furnitureName = "PetWaterBowl"
+        furnitureAction = "UseBlock"
+    elseif ailmentId == "toilet" then
+        targetHeadCFrame = petHead.CFrame * CFrame.new(0, -1, 0) * CFrame.Angles(0.5, 0, 0)
+        furnitureName = "Toilet"
+        furnitureAction = "Seat1"
+    end
+    
+    -- After teleporting, find and activate the furniture
+    if furnitureName then
+        local furnitureFolder = Workspace:WaitForChild("HouseInteriors"):WaitForChild("furniture")
+        if furnitureFolder then
+            local foundItem = findDeep(furnitureFolder, furnitureName)
+            if foundItem then
+                local furnitureParent = foundItem.Parent
+                local parts = string.split(furnitureParent.Name, "/")
+                local furnitureId = parts[#parts]
+                
+                print("Found the furniture ID for " .. furnitureName .. ": " .. furnitureId)
+                
+                local cframe = character:WaitForChild("Head").CFrame
+                
+                local args = {
+                    LocalPlayer,
+                    furnitureId,
+                    furnitureAction,
+                    {
+                        cframe = cframe
+                    },
+                    petModel -- Use the first found pet model.
+                }
+                
+                activateFurniture:InvokeServer(unpack(args))
+                print("Successfully called ActivateFurniture for " .. furnitureName .. " with the '" .. furnitureAction .. "' action.")
+            else
+                warn("Could not find " .. furnitureName .. " inside the furniture folder.")
+            end
+        else
+            warn("The 'furniture' folder could not be found.")
+        end
+    elseif ailmentId == "play" then
+        print("Attempting to fix 'play' ailment by creating Squeaky Bone.")
+        
+        local PetObjectRemote = ReplicatedStorage:WaitForChild("API"):WaitForChild("PetObjectAPI/CreatePetObject")
+        if not PetObjectRemote then
+            warn("PetObjectAPI/CreatePetObject not found. Cannot fix 'play' ailment.")
+            return
+        end
 
-		print("Found Squeaky Bone with unique ID:", itemUniqueId)
+        local serverData = ClientDataModule.get_data()
+        local playerData = serverData and serverData[LocalPlayer.Name]
+        local itemUniqueId = nil
+        
+        if playerData and playerData.inventory and playerData.inventory.toys then
+            for uniqueId, itemData in pairs(playerData.inventory.toys) do
+                if itemData.id == "squeaky_bone_default" then
+                    itemUniqueId = uniqueId
+                    break
+                end
+            end
+        end
 
-		-- Wait for the ailment to complete or a timeout
-		local ailmentCompleted = false
-		local connection = AilmentsManager.get_ailment_completed_signal():Connect(function(instance, key)
-			if key == ailmentData.entityUniqueKey and instance == ailmentData.ailmentInstance then
-				ailmentCompleted = true
-			end
-		end)
-		
-		local timeout = 60 -- seconds
-		local startTime = os.time()
-		
-		while not ailmentCompleted and (os.time() - startTime) < timeout do
-			local args = {
-				"__Enum_PetObjectCreatorType_1",
-				{
-					reaction_name = "ThrowToyReaction",
-					unique_id = itemUniqueId
-				}
-			}
-			
-			local success, result = pcall(PetObjectRemote.InvokeServer, PetObjectRemote, unpack(args))
-			
-			if success then
-				print("Successfully created the toy.")
-			else
-				warn("Failed to create toy:", tostring(result))
-			end
-			
-			-- This is the requested change: wait 10 seconds between creations.
-			task.wait(10)
-		end
-		
-		connection:Disconnect()
+        if not itemUniqueId then
+            warn("Squeaky Bone not found in inventory. Cannot fix 'play' ailment.")
+            return
+        end
 
-		if not ailmentCompleted then
-			warn("Ailment did not complete within timeout. Cannot force completion, relying on in-game action.")
-		end
-	elseif ailmentId == "walk" then
-		print("Attempting to hold pet for 'walk' ailment.")
-		
-		-- Store the pet model for cleanup
-		local uiEntry = activeAilments[ailmentData.entityUniqueKey] and activeAilments[ailmentData.entityUniqueKey][ailmentId]
-		if uiEntry then
-			uiEntry.petModel = petModel
-		end
+        print("Found Squeaky Bone with unique ID:", itemUniqueId)
 
-		local success, result = pcall(function()
-			HoldBabyRemote:FireServer(petModel)
-		end)
-		if not success then warn("Failed to hold baby:", result) end
-	elseif ailmentId == "ride" then
-		print("Attempting to equip stroller for 'ride' ailment.")
-		
-		local serverData = ClientDataModule.get_data()
-		local playerData = serverData[LocalPlayer.Name]
-		local itemType = "strollers"
-		
-		if playerData and playerData.inventory and playerData.inventory[itemType] then
-			local playerItems = playerData.inventory[itemType]
-			
-			if next(playerItems) then
-				local firstItemUniqueId = nil
-				for uniqueId, itemData in pairs(playerItems) do
-					firstItemUniqueId = uniqueId
-					break -- Only need the first one
-				end
-				
-				if firstItemUniqueId then
-					print("✅ Found a stroller to equip!")
-					
-					local uiEntry = activeAilments[ailmentData.entityUniqueKey] and activeAilments[ailmentData.entityUniqueKey][ailmentId]
-					if uiEntry then
-						uiEntry.unequipItemId = firstItemUniqueId
-					end
-					
-					local success, result = pcall(function()
-						ToolEquipRemote:InvokeServer(firstItemUniqueId)
-					end)
-					
-					if success then
-						print("✅ Successfully sent equip command!")
-					else
-						print("❌ Equip command failed: " .. tostring(result))
-					end
-				else
-					print("❌ No strollers found in your inventory.")
-				end
-			else
-				print("❌ No strollers found in your inventory.")
-			end
-		else
-			print("❌ Required data tables not found for " .. itemType .. ".")
-		end
-	end
-	
-	-- Wait for the ailment to complete or a timeout
-	local ailmentCompleted = false
-	local connection = AilmentsManager.get_ailment_completed_signal():Connect(function(instance, key)
-		if key == ailmentData.entityUniqueKey and instance == ailmentData.ailmentInstance then
-			ailmentCompleted = true
-		end
-	end)
+        -- Wait for the ailment to complete or a timeout
+        local ailmentCompleted = false
+        local connection = AilmentsManager.get_ailment_completed_signal():Connect(function(instance, key)
+            if key == ailmentData.entityUniqueKey and instance == ailmentData.ailmentInstance then
+                ailmentCompleted = true
+            end
+        end)
+        
+        local timeout = 60 -- seconds
+        local startTime = os.time()
+        
+        while not ailmentCompleted and (os.time() - startTime) < timeout do
+            local args = {
+                "__Enum_PetObjectCreatorType_1",
+                {
+                    reaction_name = "ThrowToyReaction",
+                    unique_id = itemUniqueId
+                }
+            }
+            
+            local success, result = pcall(PetObjectRemote.InvokeServer, PetObjectRemote, unpack(args))
+            
+            if success then
+                print("Successfully created the toy.")
+            else
+                warn("Failed to create toy:", tostring(result))
+            end
+            
+            -- This is the requested change: wait 10 seconds between creations.
+            task.wait(10)
+        end
+        
+        connection:Disconnect()
 
-	local timeout = 60 -- seconds
-	local startTime = os.time()
-	while not ailmentCompleted and (os.time() - startTime) < timeout do
-		-- For "walk" and "ride", make the character jump to force completion
-		if ailmentId == "walk" or ailmentId == "ride" then
-			if humanoid and humanoid.Parent then
-				humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-			end
-		end
-		task.wait(1)
-	end
-	
-	connection:Disconnect()
+        if not ailmentCompleted then
+            warn("Ailment did not complete within timeout. Cannot force completion, relying on in-game action.")
+        end
+    elseif ailmentId == "walk" then
+        print("Attempting to hold pet for 'walk' ailment.")
+        
+        -- Store the pet model for cleanup
+        local uiEntry = activeAilments[ailmentData.entityUniqueKey] and activeAilments[ailmentData.entityUniqueKey][ailmentId]
+        if uiEntry then
+            uiEntry.petModel = petModel
+        end
 
-	if not ailmentCompleted then
-		warn("Ailment did not complete within timeout. Cannot force completion, relying on in-game action.")
-	end
-	
-	print("Ailment completed. Teleporting back to housing.")
-	
-	local destinationId_Return = "housing"
-	local doorIdForTeleport_Return = "MainDoor"
-	local teleportSettings_Return = {
-		house_owner = LocalPlayer,
-	}
-	
-	task.wait(1)
-	
-	InteriorsM.enter_smooth(destinationId_Return, doorIdForTeleport_Return, teleportSettings_Return, nil)
-	
-	task.wait(2)
-	print("Successfully returned to housing.")
-end
+        local success, result = pcall(function()
+            HoldBabyRemote:FireServer(petModel)
+        end)
+        if not success then warn("Failed to hold baby:", result) end
+    elseif ailmentId == "ride" then
+        print("Attempting to equip stroller for 'ride' ailment.")
+        
+        local serverData = ClientDataModule.get_data()
+        local playerData = serverData and serverData[LocalPlayer.Name]
+        local itemType = "strollers"
+        
+        if playerData and playerData.inventory and playerData.inventory[itemType] then
+            local playerItems = playerData.inventory[itemType]
+            
+            if next(playerItems) then
+                local firstItemUniqueId = nil
+                for uniqueId, itemData in pairs(playerItems) do
+                    firstItemUniqueId = uniqueId
+                    break -- Only need the first one
+                end
+                
+                if firstItemUniqueId then
+                    print("✅ Found a stroller to equip!")
+                    
+                    -- Store the unique item ID for later cleanup.
+                    local uiEntry = activeAilments[ailmentData.entityUniqueKey] and activeAilments[ailmentData.entityUniqueKey][ailmentId]
+                    if uiEntry then
+                        uiEntry.unequipItemId = firstItemUniqueId
+                    end
+                    
+                    local success, result = pcall(function()
+                        ToolEquipRemote:InvokeServer(firstItemUniqueId)
+                    end)
+                    
+                    if success then
+                        print("✅ Successfully sent equip command!")
+                    else
+                        print("❌ Equip command failed: " .. tostring(result))
+                    end
+                else
+                    print("❌ No strollers found in your inventory.")
+                end
+            else
+                print("❌ No strollers found in your inventory.")
+            end
+        else
+            print("❌ Required data tables not found for " .. itemType .. ".")
+        end
+    end
+    
+    -- Wait for the ailment to complete or a timeout
+    local ailmentCompleted = false
+    local connection = AilmentsManager.get_ailment_completed_signal():Connect(function(instance, key)
+        if key == ailmentData.entityUniqueKey and instance == ailmentData.ailmentInstance then
+            ailmentCompleted = true
+        end
+    end)
 
-local function teleportToStaticMap(ailmentData)
-	-- Add a check to prevent nil errors
-	if not AilmentsManager then
-		warn("AilmentsManager is nil. Cannot teleport to static map.")
-		return
-	end
-	
-	-- Find the correct target based on the ailment
-	local targetPath = STATIC_MAP_TARGETS[ailmentData.ailmentId]
-	if not targetPath then
-		warn("No static map target found for ailment:", ailmentData.ailmentId)
-		return
-	end
-	
-	local targetPart = Workspace:FindFirstChild(targetPath)
-	if not targetPart then
-		-- Fallback to a recursive search if the part is not a direct child of Workspace
-		local parts = string.split(targetPath, ".")
-		local currentParent = Workspace
-		for _, partName in ipairs(parts) do
-			currentParent = currentParent:FindFirstChild(partName)
-			if not currentParent then
-				warn("Could not find part '" .. partName .. "' at path: " .. targetPath)
-				return
-			end
-		end
-		targetPart = currentParent
-	end
+    local timeout = 60 -- seconds
+    local startTime = os.time()
+    while not ailmentCompleted and (os.time() - startTime) < timeout do
+        -- For "walk" and "ride", make the character jump to force completion
+        if ailmentId == "walk" or ailmentId == "ride" then
+            if humanoid and humanoid.Parent then
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end
+        task.wait(1)
+    end
+    
+    connection:Disconnect()
 
-	if not targetPart then
-		warn("Could not find target part at path:", targetPath)
-		return
-	end
-
-    print("🔄Teleporting to Ailment Location on MainMap...")
-    local targetCFrame = targetPart.CFrame * CFrame.new(0, 5, 0) -- Add a small offset to prevent the character from being stuck
-
-    -- Teleport player and pet
-    safeTeleportToCFrame(targetCFrame)
-	
-	print("Teleported to static map location:", targetPath)
-
-	print("Waiting for ailment to complete:", ailmentData.ailmentId)
-	
-	local ailmentCompleted = false
-	local connection = AilmentsManager.get_ailment_completed_signal():Connect(function(instance, key)
-		if key == ailmentData.entityUniqueKey and instance == ailmentData.ailmentInstance then
-			ailmentCompleted = true
-		end
-	end)
-
-	local timeout = 60 -- seconds
-	local startTime = os.time()
-	while not ailmentCompleted and (os.time() - startTime) < timeout do
-		task.wait(1)
-	end
-	
-	connection:Disconnect()
-	
-	if not ailmentCompleted then
-		warn("Ailment did not complete within timeout. Cannot force completion, relying on in-game action.")
-	end
-	
-	print("Task wait completed. Teleporting back to housing.")
-	
-	-- Replicate the call to go back to housing
-	local destinationId_Return = "housing"
-	local doorIdForTeleport_Return = "MainDoor"
-	local teleportSettings_Return = {
-		house_owner = LocalPlayer,
-	}
-	
-	task.wait(1)
-	
-	InteriorsM.enter_smooth(destinationId_Return, doorIdForTeleport_Return, teleportSettings_Return, nil)
-	
-	task.wait(2)
-	print("Successfully returned to housing.")
+    if not ailmentCompleted then
+        warn("Ailment did not complete within timeout. Cannot force completion, relying on in-game action.")
+    end
+    
+    print("Ailment completed. Teleporting back to housing.")
+    
+    local destinationId_Return = "housing"
+    local doorIdForTeleport_Return = "MainDoor"
+    local teleportSettings_Return = {
+        house_owner = LocalPlayer,
+    }
+    
+    task.wait(1)
+    
+    -- Re-acquire InteriorsM before the return teleport
+    InteriorsM = require(ReplicatedStorage.ClientModules.Core.InteriorsM.InteriorsM)
+    InteriorsM.enter_smooth(destinationId_Return, doorIdForTeleport_Return, teleportSettings_Return, nil)
+    
+    task.wait(2)
+    print("Successfully returned to housing.")
+    lockDoor()
 end
 
 -- New function to handle interior-specific ailments like Salon, Pizza Shop, and School.
 local function handleInteriorAilment(ailmentData, locationName)
+	-- Re-acquire InteriorsM here to ensure it's not nil after the teleport
+	InteriorsM = require(ReplicatedStorage.ClientModules.Core.InteriorsM.InteriorsM)
+	
 	print("🔄Performing smooth entry to " .. locationName .. " before teleport.")
 	local destinationId = locationName
 	local doorIdForTeleport = "MainDoor"
@@ -875,47 +871,67 @@ local function handleInteriorAilment(ailmentData, locationName)
 	InteriorsM.enter_smooth(destinationId, doorIdForTeleport, teleportSettings, nil)
 	task.wait(2) -- Wait for the smooth entry to complete
 	
-	-- Ailment-specific action after teleport.
-	local ailmentId = ailmentData.ailmentId
-	local furnitureName = nil
-	
-	if ailmentId == "pizza_party" then
-		furnitureName = "PizzaTable" -- Or "PizzaTable1", "PizzaTable2", etc.
-		print("Attempting to find and sit at a " .. furnitureName .. "...")
-	elseif ailmentId == "salon" then
-		furnitureName = "SalonChair" -- Or a similar interactive part
-		print("Attempting to find and sit at a " .. furnitureName .. "...")
-	elseif ailmentId == "school" then
-		furnitureName = "SchoolDesk" -- Or "Desk"
-		print("Attempting to find and sit at a " .. furnitureName .. "...")
+	-- Get the specific furniture name from our new mapping.
+	local furnitureName = AILMENT_FURNITURE_MAPPING[ailmentData.ailmentId]
+	if not furnitureName then
+		warn("No specific furniture mapped for ailment:", ailmentData.ailmentId)
+		return
 	end
 	
-	-- Find the furniture within the current interior.
-	local furniturePart = findDeep(Workspace:WaitForChild("Interiors"):WaitForChild(locationName):WaitForChild("Interior"), furnitureName)
+	print("Attempting to find and teleport to the " .. furnitureName .. "...")
+	
+	-- The key change: search in the shared HouseInteriors.furniture folder
+    local furnitureFolder = Workspace:WaitForChild("HouseInteriors"):WaitForChild("furniture")
+    if not furnitureFolder then
+        warn("Could not find the 'furniture' folder.")
+        return
+    end
 
-	if furniturePart and furniturePart.Parent then
-		local furnitureId = furniturePart.Parent.Name
-		local furnitureAction = "Seat1" -- Assuming the seating action is "Seat1" for these furniture items.
-		
-		local args = {
-			LocalPlayer,
-			furnitureId,
-			furnitureAction,
-			{
-				cframe = LocalPlayer.Character.HumanoidRootPart.CFrame
-			},
-			getFirstPetModel()
-		}
-		
-		local success, result = pcall(activateFurniture.InvokeServer, activateFurniture, unpack(args))
-		
-		if success then
-			print("✅ Successfully called ActivateFurniture for " .. furnitureName .. "!")
+    local furnitureModel = findDeep(furnitureFolder, furnitureName)
+
+	if furnitureModel then
+		local placementBlock = findDeep(furnitureModel, "PlacementBlock")
+
+		if placementBlock and placementBlock:IsA("BasePart") then
+			-- Teleport player and pet to the furniture's CFrame to be in range for activation.
+			safeTeleportToCFrame(placementBlock.CFrame * CFrame.new(0, 5, 0)) -- Add a small offset
+			print("✅Teleported to " .. furnitureModel.Name .. " CFrame using PlacementBlock.")
+			task.wait(1)
+			
+			-- Use the parent's name to get the correct furniture ID
+			local furnitureParent = furnitureModel.Parent
+			local parts = string.split(furnitureParent.Name, "/")
+			local furnitureId = parts[#parts]
+			local furnitureAction = "Seat1"
+
+			-- Special case for the washbasin in the salon. It has no parent.
+			if furnitureName == "ColoredHairSprayWashBasin" then
+				furnitureId = furnitureModel.Name
+				furnitureAction = "Use" -- Assuming 'Use' is the action.
+			end
+			
+			local args = {
+				LocalPlayer,
+				furnitureId,
+				furnitureAction,
+				{
+					cframe = LocalPlayer.Character.HumanoidRootPart.CFrame
+				},
+				getFirstPetModel()
+			}
+			
+			local success, result = pcall(activateFurniture.InvokeServer, activateFurniture, unpack(args))
+			
+			if success then
+				print("✅ Successfully called ActivateFurniture for " .. furnitureModel.Name .. "!")
+			else
+				warn("❌ Failed to call ActivateFurniture:", tostring(result))
+			end
 		else
-			warn("❌ Failed to call ActivateFurniture:", tostring(result))
+			warn("❌ Could not find PlacementBlock within the furniture:", furnitureName)
 		end
 	else
-		warn("❌ Could not find " .. furnitureName .. " inside the " .. locationName .. " interior.")
+		warn("❌ Could not find " .. furnitureName .. " inside the furniture folder.")
 	end
 
 	-- Wait for the ailment to complete or a timeout
@@ -948,43 +964,78 @@ local function handleInteriorAilment(ailmentData, locationName)
 	
 	task.wait(1)
 	
+	-- Re-acquire InteriorsM before the return teleport
+	InteriorsM = require(ReplicatedStorage.ClientModules.Core.InteriorsM.InteriorsM)
 	InteriorsM.enter_smooth(destinationId_Return, doorIdForTeleport_Return, teleportSettings_Return, nil)
 	
 	task.wait(2)
 	print("Successfully returned to housing.")
+	lockDoor()
 end
 
-local function cleanupAilment(ailmentData)
-	local ailmentId = ailmentData.ailmentId
-
-	if ailmentId == "ride" then
-		if ailmentData.unequipItemId and UnequipRemote then
-			local success, result = pcall(function()
-				return UnequipRemote:InvokeServer(ailmentData.unequipItemId)
-			end)
-			if success then
-				print("✅ Unequipped stroller with ID:", ailmentData.unequipItemId, "after 'ride' ailment.")
-			else
-				warn("Failed to unequip stroller:", result)
-			end
-		end
-	elseif ailmentId == "walk" then
-		if ailmentData.petModel and EjectBabyRemote then
-			local success, result = pcall(function()
-				EjectBabyRemote:FireServer(ailmentData.petModel)
-			end)
-			if success then
-				print("✅ Unheld/Ejected pet after 'walk'/'ride' ailment.")
-			else
-				warn("Failed to unhold/eject pet:", result)
-			end
-		end
+-- New function to teleport to a static map location and handle the ailment.
+local function teleportToStaticMap(ailmentData)
+	local targetPath = STATIC_MAP_TARGETS[ailmentData.ailmentId]
+	if not targetPath then
+		warn("No target path found for ailment:", ailmentData.ailmentId)
+		return
 	end
+
+    -- Find the target part, waiting a bit in case the map hasn't loaded fully
+    local targetPart = Workspace:FindFirstChild(string.split(targetPath, ".")[#string.split(targetPath, ".")], true)
+
+	if not targetPart or not targetPart:IsA("BasePart") then
+		warn("Could not find a valid part at path:", targetPath)
+		return
+	end
+	
+	safeTeleportToCFrame(targetPart.CFrame * CFrame.new(0, 5, 0))
+	print("Successfully teleported to the static map location for the ailment.")
+
+    -- Now, handle the ailment-specific logic
+    if ailmentData.ailmentId == "camping" or ailmentData.ailmentId == "bored" or ailmentData.ailmentId == "beach_party" then
+        -- Wait for the ailment to complete or a timeout
+        local ailmentCompleted = false
+        local connection = AilmentsManager.get_ailment_completed_signal():Connect(function(instance, key)
+            if key == ailmentData.entityUniqueKey and instance == ailmentData.ailmentInstance then
+                ailmentCompleted = true
+            end
+        end)
+        
+        local timeout = 60 -- seconds
+        local startTime = os.time()
+        while not ailmentCompleted and (os.time() - startTime) < timeout do
+            task.wait(1)
+        end
+        
+        connection:Disconnect()
+
+        if not ailmentCompleted then
+            warn("Ailment did not complete within timeout. Cannot force completion, relying on in-game action.")
+        end
+
+        print("Ailment resolved at static map location. Teleporting back to housing.")
+        
+        local destinationId_Return = "housing"
+        local doorIdForTeleport_Return = "MainDoor"
+        local teleportSettings_Return = {
+            house_owner = LocalPlayer,
+        }
+        
+        task.wait(1)
+        InteriorsM.enter_smooth(destinationId_Return, doorIdForTeleport_Return, teleportSettings_Return, nil)
+        
+        task.wait(2)
+        print("Successfully returned to housing.")
+    end
 end
+
 
 -- The main processing function which handles the `isProcessingAilment` flag.
 local function processAilment(ailmentData)
-	-- Add a check to prevent nil errors
+	-- Re-acquire InteriorsM here to ensure it's not nil before the first teleport
+	InteriorsM = require(ReplicatedStorage.ClientModules.Core.InteriorsM.InteriorsM)
+
 	if not AilmentsManager then
 		warn("AilmentsManager is nil. Cannot process ailment.")
 		isProcessingAilment = false
@@ -1166,9 +1217,11 @@ local function onAilmentComplete(ailmentInstance, entityUniqueKey, completionRea
 	local isPet = string.len(entityUniqueKey) > 10
 	local entityRef = createEntityReference(LocalPlayer, isPet, entityUniqueKey)
 	
+	-- Get the ailment data before it's removed by the logger.
+	local ailmentEntry = activeAilments[entityUniqueKey] and activeAilments[entityUniqueKey][getAilmentIdFromInstance(ailmentInstance)]
+	
 	logAilmentRemoved(ailmentInstance, entityUniqueKey, entityRef)
 	
-	local ailmentEntry = activeAilments[entityUniqueKey] and activeAilments[entityUniqueKey][getAilmentIdFromInstance(ailmentInstance)]
 	if ailmentEntry then
 		cleanupAilment(ailmentEntry)
 	end
@@ -1264,3 +1317,5 @@ print("✅Ailment Manager Script initializing...")
 
 -- The main entry point is now wrapped in a function and called after module loading is confirmed.
 runMainLogic()
+
+
