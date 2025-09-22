@@ -1002,7 +1002,7 @@ local function teleportToStaticMap(ailmentData)
             end
         end)
         
-        local timeout = 60 -- seconds
+        local timeout = 88 -- seconds
         local startTime = os.time()
         while not ailmentCompleted and (os.time() - startTime) < timeout do
             task.wait(1)
@@ -1011,6 +1011,8 @@ local function teleportToStaticMap(ailmentData)
         connection:Disconnect()
 
         if not ailmentCompleted then
+
+	
             warn("Ailment did not complete within timeout. Cannot force completion, relying on in-game action.")
         end
 
