@@ -60,7 +60,7 @@ task.wait(waitBeforeTeleport)
 print("\n--- Initiating Direct Teleport to Housing ---")
 -- Call the enter_smooth function for the teleport.
 InteriorsM.enter_smooth("housing", "MainDoor", teleportSettings, nil)
-print("Adopt Me automatic direct house teleport script initiated.")
+print(" automatic direct house teleport script initiated.")
 
 -- Add a wait to ensure the teleport is fully complete before continuing.
 task.wait(5) 
